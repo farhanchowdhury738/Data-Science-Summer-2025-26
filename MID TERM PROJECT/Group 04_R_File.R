@@ -1,0 +1,331 @@
+
+cat("\n Task1: Exploratory Data Analysis \n")
+data <- read.csv("C:\\Users\\Farhan\\Downloads\\archive\\sleep_health_dataset_modified.csv",
+                 header = TRUE, sep = ",",
+                 stringsAsFactors = FALSE, na.strings = c("NA", ""))
+
+raw_data <- data
+
+cat("Structure of the dataset: \n")
+str(data)
+
+cat("\n First 6 rows: \n")
+print(head(data))
+
+cat("\n Dataset size: \n")
+cat("Rows:", nrow(data), "\n")
+cat("Columns:", ncol(data), "\n")
+
+cat("\nColumn names: \n")
+print(names(data))
+
+cat("\n Summary of the dataset: \n")
+print(summary(data))
+
+cat("\n Target variable (sleep_disorder_risk) distribution: \n")
+print(table(data$sleep_disorder_risk))
+cat("Proportions (%): \n")
+print(round(prop.table(table(data$sleep_disorder_risk)) * 100, 2))
+
+
+
+cat("\n Task8: Invalid Data Detection and Handling \n")
+cat("(Performed early so numeric columns are clean for subsequent tasks) \n\n")
+
+cat("Cleaning non-numeric values in bmi \n")
+invalid_bmi_text <- sum(grepl("[^0-9.\\-]", data$bmi), na.rm = TRUE)
+cat("Non-numeric bmi values found:", invalid_bmi_text, "\n")
+data$bmi <- suppressWarnings(as.numeric(data$bmi))
+cat("Converted bmi to numeric (non-numeric values become NA) \n")
+
+cat("\n Cleaning non-numeric values in sleep_duration_hrs \n")
+invalid_text_idx <- grepl("[^0-9.\\-]", data$sleep_duration_hrs)
+cat("Non-numeric sleep_duration_hrs values found:", sum(invalid_text_idx, na.rm = TRUE), "\n")
+cat("Examples:", head(data$sleep_duration_hrs[invalid_text_idx], 5), "\n")
+data$sleep_duration_hrs <- suppressWarnings(as.numeric(data$sleep_duration_hrs))
+cat("Converted to numeric (non-numeric values become NA) \n")
+
+cat("\n Handling negative age values \n")
+invalid_age_count <- sum(data$age < 0, na.rm = TRUE)
+cat("Negative age values found:", invalid_age_count, "\n")
+data$age[data$age < 0] <- NA
+med_age <- round(median(data$age, na.rm = TRUE))
+data$age[is.na(data$age)] <- med_age
+cat("Replaced with median age:", med_age, "\n")
+
+cat("\n Handling negative sleep_duration_hrs \n")
+neg_sleep <- sum(data$sleep_duration_hrs < 0, na.rm = TRUE)
+cat("Negative sleep_duration values found:", neg_sleep, "\n")
+data$sleep_duration_hrs[data$sleep_duration_hrs < 0] <- NA
+cat("Set negative sleep values to NA (will be imputed in Task 2)\n")
+
+cat("\n Handling heart_rate_resting_bpm <= 30 \n")
+low_hr <- sum(data$heart_rate_resting_bpm <= 30, na.rm = TRUE)
+cat("Heart rate <= 30 values found:", low_hr, "\n")
+data$heart_rate_resting_bpm[data$heart_rate_resting_bpm <= 30] <- NA
+med_hr <- round(median(data$heart_rate_resting_bpm, na.rm = TRUE))
+data$heart_rate_resting_bpm[is.na(data$heart_rate_resting_bpm)] <- med_hr
+cat("Replaced with median heart rate:", med_hr, "\n")
+
+cat("\n Handling invalid gender values \n")
+cat("Gender distribution before cleaning:\n")
+print(table(data$gender))
+data$gender[!(data$gender %in% c("Male", "Female", "Other"))] <- "Other"
+cat("Gender distribution after cleaning:\n")
+print(table(data$gender))
+
+
+
+cat("\n Task2: Missing Value Treatment \n")
+cat("Missing values BEFORE treatment:\n")
+print(colSums(is.na(data)))
+cat("Total missing values:", sum(is.na(data)), "\n\n")
+
+cat(" Imputing numerical columns with median \n")
+data$bmi[is.na(data$bmi)] <- median(data$bmi, na.rm = TRUE)
+cat("bmi imputed with median\n")
+
+data$sleep_duration_hrs[is.na(data$sleep_duration_hrs)] <- median(data$sleep_duration_hrs, na.rm = TRUE)
+cat("sleep_duration_hrs imputed with median\n")
+
+data$cognitive_performance_score[is.na(data$cognitive_performance_score)] <- median(data$cognitive_performance_score, na.rm = TRUE)
+cat("cognitive_performance_score imputed with median\n")
+
+cat("\n Imputing categorical columns with mode \n")
+get_mode <- function(v) {
+  uniqv <- unique(v[!is.na(v)])
+  return(uniqv[which.max(tabulate(match(v, uniqv)))])
+}
+
+data$occupation[is.na(data$occupation)] <- get_mode(data$occupation)
+cat("occupation imputed with mode:", get_mode(raw_data$occupation), "\n")
+
+data$mental_health_condition[is.na(data$mental_health_condition)] <- get_mode(data$mental_health_condition)
+cat("mental_health_condition imputed with mode:", get_mode(raw_data$mental_health_condition), "\n")
+
+cat("\nMissing values AFTER treatment (stress_score handled in Task 12):\n")
+print(colSums(is.na(data)))
+
+
+
+cat("\n Task3: Outlier Detection and Handling \n")
+detect_outliers_iqr <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr_val <- q3 - q1
+  return(which(x < q1 - 1.5 * iqr_val | x > q3 + 1.5 * iqr_val))
+}
+
+cap_outliers_iqr <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr_val <- q3 - q1
+  lower <- q1 - 1.5 * iqr_val
+  upper <- q3 + 1.5 * iqr_val
+  x[x < lower] <- lower
+  x[x > upper] <- upper
+  return(x)
+}
+
+cat(" steps_that_day \n")
+outliers_steps <- detect_outliers_iqr(data$steps_that_day)
+cat("Outliers before capping:", length(outliers_steps), "\n")
+data$steps_that_day <- cap_outliers_iqr(data$steps_that_day)
+cat("Outliers after capping:", length(detect_outliers_iqr(data$steps_that_day)), "\n")
+
+cat("\n screen_time_before_bed_mins \n")
+outliers_screen <- detect_outliers_iqr(data$screen_time_before_bed_mins)
+cat("Outliers before capping:", length(outliers_screen), "\n")
+data$screen_time_before_bed_mins <- cap_outliers_iqr(data$screen_time_before_bed_mins)
+cat("Outliers after capping:", length(detect_outliers_iqr(data$screen_time_before_bed_mins)), "\n")
+
+
+
+cat("\n Task4: Numeric to Categorical and Categorical to Numeric \n")
+cat(" Numeric to Categorical: age -> age_group \n")
+data$age_group <- cut(data$age,
+                      breaks = c(17, 30, 50, 100),
+                      labels = c("Young", "Middle-aged", "Senior"))
+cat("age_group distribution:\n")
+print(table(data$age_group))
+
+cat("\n Categorical to Numeric: gender -> gender_num \n")
+data$gender_num <- as.numeric(factor(data$gender,
+                                     levels = c("Female", "Male", "Other")))
+cat("Mapping: Female=1, Male=2, Other=3\n")
+print(table(data$gender, data$gender_num))
+
+
+
+cat("\n Task5: Normalization \n")
+min_max_normalize <- function(x) {
+  return((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
+}
+
+cat("stress_score BEFORE normalization:\n")
+print(summary(data$stress_score))
+
+data$stress_score_minmax <- min_max_normalize(data$stress_score)
+cat("\nstress_score AFTER Min-Max normalization:\n")
+print(summary(data$stress_score_minmax))
+
+
+
+cat("\n Task 6: Duplicate Detection and Removal \n")
+dup_count <- sum(duplicated(data[, -which(names(data) == "person_id")]))
+cat("Total rows:", nrow(data), "\n")
+cat("Duplicate rows found:", dup_count, "\n")
+data <- data[!duplicated(data[, -which(names(data) == "person_id")]), ]
+cat("Rows after removing duplicates:", nrow(data), "\n")
+
+
+
+
+cat("\n Task 7: Data Filtering \n")
+cat("Filtering data to keep only top 5 countries by frequency\n\n")
+cat("Country distribution:\n")
+print(sort(table(data$country), decreasing = TRUE))
+
+top5 <- names(sort(table(data$country), decreasing = TRUE))[1:5]
+cat("\nTop 5 countries:", top5, "\n")
+
+data_filtered <- data[data$country %in% top5, ]
+cat("Rows before filtering:", nrow(data), "\n")
+cat("Rows after filtering:", nrow(data_filtered), "\n")
+
+
+
+cat("\n Task9: Feature Engineering \n")
+cat("Creating new feature: sleep_efficiency = deep_sleep_percentage + rem_percentage\n")
+data$sleep_efficiency <- data$deep_sleep_percentage + data$rem_percentage
+cat("\nSummary of sleep_efficiency:\n")
+print(summary(data$sleep_efficiency))
+
+
+
+cat("\n Task 10: Class Balancing (Under/Over-Sampling) \n")
+cat("Original class distribution\n")
+class_counts <- table(data$sleep_disorder_risk)
+print(class_counts)
+
+cat("\n Under-sampling \n")
+min_count <- min(class_counts)
+cat("Minimum class count:", min_count, "\n")
+set.seed(42)
+under_idx <- unlist(lapply(names(class_counts), function(cl) {
+  return(sample(which(data$sleep_disorder_risk == cl), min_count))
+}))
+data_under <- data[under_idx, ]
+cat("Under-sampled distribution:\n")
+print(table(data_under$sleep_disorder_risk))
+
+cat("\n Over-sampling \n")
+max_count <- max(class_counts)
+cat("Maximum class count:", max_count, "\n")
+set.seed(42)
+over_idx <- unlist(lapply(names(class_counts), function(cl) {
+  return(sample(which(data$sleep_disorder_risk == cl), max_count, replace = TRUE))
+}))
+data_over <- data[over_idx, ]
+cat("Over-sampled distribution:\n")
+print(table(data_over$sleep_disorder_risk))
+
+
+
+cat("\n Task11: Train/Test Split (70/30) \n")
+set.seed(42)
+train_idx <- sample(1:nrow(data), size = round(0.7 * nrow(data)))
+train_data <- data[train_idx, ]
+test_data <- data[-train_idx, ]
+cat("Total rows:", nrow(data), "\n")
+cat("Training rows:", nrow(train_data), "\n")
+cat("Testing rows:", nrow(test_data), "\n")
+cat("Train percentage:", round(nrow(train_data) / nrow(data) * 100, 1), "%\n")
+cat("Test percentage:", round(nrow(test_data) / nrow(data) * 100, 1), "%\n")
+
+
+
+cat("\n Task12: Mean vs Median Imputation Comparison \n")
+cat("Comparing mean and median imputation for stress_score\n\n")
+cat("Missing values in stress_score:", sum(is.na(data$stress_score)), "\n\n")
+
+sd_before <- sd(data$stress_score, na.rm = TRUE)
+cat("Standard deviation BEFORE imputation:", round(sd_before, 4), "\n\n")
+
+stress_mean_imputed <- data$stress_score
+stress_mean_imputed[is.na(stress_mean_imputed)] <- mean(stress_mean_imputed, na.rm = TRUE)
+sd_mean <- sd(stress_mean_imputed)
+
+stress_median_imputed <- data$stress_score
+stress_median_imputed[is.na(stress_median_imputed)] <- median(stress_median_imputed, na.rm = TRUE)
+sd_median <- sd(stress_median_imputed)
+
+cat("SD after MEAN imputation:   ", round(sd_mean, 4), "\n")
+cat("SD after MEDIAN imputation: ", round(sd_median, 4), "\n\n")
+
+cat("Mean of original:             ", round(mean(data$stress_score, na.rm = TRUE), 4), "\n")
+cat("Mean after mean imputation:   ", round(mean(stress_mean_imputed), 4), "\n")
+cat("Mean after median imputation: ", round(mean(stress_median_imputed), 4), "\n\n")
+
+cat("Median of original:             ", round(median(data$stress_score, na.rm = TRUE), 4), "\n")
+cat("Median after mean imputation:   ", round(median(stress_mean_imputed), 4), "\n")
+cat("Median after median imputation: ", round(median(stress_median_imputed), 4), "\n\n")
+
+cat("Conclusion: Median imputation preserves the original SD and distribution\n")
+cat("better because it is less sensitive to outliers than the mean.\n")
+
+data$stress_score <- stress_median_imputed
+data$stress_score_minmax <- min_max_normalize(data$stress_score)
+
+cat("\nFinal missing values check:\n")
+print(colSums(is.na(data)))
+
+
+
+cat("\n Task13: Descriptive Statistics by Target Class \n")
+cat("Descriptive statistics grouped by sleep_disorder_risk:\n\n")
+classes <- unique(data$sleep_disorder_risk)
+for (cl in sort(classes)) {
+  sub <- data[data$sleep_disorder_risk == cl, ]
+  cat("Class:", cl, "(n =", nrow(sub), ") \n")
+  cat("  sleep_duration_hrs -> Mean:", round(mean(sub$sleep_duration_hrs), 2),
+      " SD:", round(sd(sub$sleep_duration_hrs), 2),
+      " Median:", round(median(sub$sleep_duration_hrs), 2), "\n")
+  cat("  stress_score       -> Mean:", round(mean(sub$stress_score), 2),
+      " SD:", round(sd(sub$stress_score), 2),
+      " Median:", round(median(sub$stress_score), 2), "\n")
+  cat("  bmi                -> Mean:", round(mean(sub$bmi), 2),
+      " SD:", round(sd(sub$bmi), 2),
+      " Median:", round(median(sub$bmi), 2), "\n\n")
+}
+
+cat("\n Task14: Comparing Averages Across Two Categories \n")
+cat("Comparing average sleep_duration_hrs across shift_work (0=No, 1=Yes)\n\n")
+
+avg_by_shift <- tapply(data$sleep_duration_hrs, data$shift_work, mean)
+cat("Average sleep duration by shift work:\n")
+print(round(avg_by_shift, 4))
+
+cat("\nT-test result:\n")
+t_result <- t.test(sleep_duration_hrs ~ shift_work, data = data)
+print(t_result)
+
+
+
+cat("\n Task15: Variability Comparison Across Categories \n")
+cat("Comparing variability of stress_score across chronotype categories\n\n")
+
+chrono_levels <- unique(data$chronotype)
+for (ch in sort(chrono_levels)) {
+  sub <- data[data$chronotype == ch, ]
+  cat("Chronotype:", ch, "(n =", nrow(sub), ") \n")
+  cat("  IQR:              ", round(IQR(sub$stress_score), 3), "\n")
+  cat("  Standard Deviation:", round(sd(sub$stress_score), 3), "\n")
+  cat("  Variance:          ", round(var(sub$stress_score), 3), "\n")
+  cat("  Range:             ", round(diff(range(sub$stress_score)), 3), "\n\n")
+}
+
+
+
+
+
